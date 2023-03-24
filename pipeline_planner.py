@@ -21,9 +21,10 @@
  *                                                                         *
  ***************************************************************************/
 """
-from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication
+from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication, Qt
 from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtWidgets import QAction
+from qgis.PyQt.QtWidgets import QAction, QMessageBox
+from qgis.gui import QgsMapToolEmitPoint, QgsRubberBand
 
 # Initialize Qt resources from file resources.py
 from .resources import *
@@ -45,9 +46,14 @@ class PipelinePlanner:
         """
         # Save reference to the QGIS interface
         self.iface = iface
+        self.canvas = self.iface.mapCanvas()
         # initialize plugin directory
         self.plugin_dir = os.path.dirname(__file__)
         # initialize locale
+        self.addPipelinePoint = QgsMapToolEmitPoint(self.canvas)  # Create a map tool point
+        self.rubberbandPipeline = QgsRubberBand(self.canvas)  # Plot the pipeline
+        self.rubberbandPipeline.setColor(Qt.red)
+        self.rubberbandPipeline.setWidth(4)
         locale = QSettings().value('locale/userLocale')[0:2]
         locale_path = os.path.join(
             self.plugin_dir,
@@ -66,6 +72,7 @@ class PipelinePlanner:
         # Check if plugin was started the first time in current QGIS session
         # Must be set in initGui() to survive plugin reloads
         self.first_start = None
+        self.dlg = PipelinePlannerDialog()
 
     # noinspection PyMethodMayBeStatic
     def tr(self, message):
@@ -170,6 +177,9 @@ class PipelinePlanner:
         # will be set False in run()
         self.first_start = True
 
+        # 设置点击事件的槽函数
+        self.addPipelinePoint.canvasClicked.connect(self.evaluatePipeline)
+
 
     def unload(self):
         """Removes the plugin menu item and icon from QGIS GUI."""
@@ -182,19 +192,28 @@ class PipelinePlanner:
 
     def run(self):
         """Run method that performs all the real work"""
+        self.canvas.setMapTool(self.addPipelinePoint)  # Put the map tool into canvas, activate it
 
-        # Create the dialog with elements (after translation) and keep reference
-        # Only create GUI ONCE in callback, so that it will only load when the plugin is started
-        if self.first_start == True:
-            self.first_start = False
-            self.dlg = PipelinePlannerDialog()
-
-        # show the dialog
-        self.dlg.show()
-        # Run the dialog event loop
-        result = self.dlg.exec_()
-        # See if OK was pressed
-        if result:
-            # Do something useful here - delete the line containing pass and
-            # substitute with your code.
-            pass
+        # # Create the dialog with elements (after translation) and keep reference
+        # # Only create GUI ONCE in callback, so that it will only load when the plugin is started
+        # if self.first_start == True:
+        #     self.first_start = False
+        #     self.dlg = PipelinePlannerDialog()
+        #
+        # # show the dialog
+        # self.dlg.show()
+        # # Run the dialog event loop
+        # result = self.dlg.exec_()
+        # # See if OK was pressed
+        # if result:
+        #     # Do something useful here - delete the line containing pass and
+        #     # substitute with your code.
+        #     pass
+    def evaluatePipeline(self, point, button):
+        if button == Qt.LeftButton:
+            self.rubberbandPipeline.addPoint(point)
+            self.rubberbandPipeline.show()
+        elif button == Qt.RightButton:
+            pipeline = self.rubberbandPipeline.asGeometry()
+            QMessageBox.information(None, "PipeLine", pipeline.asWkt())
+            self.rubberbandPipeline.reset()
