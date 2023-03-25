@@ -23,8 +23,9 @@
 """
 from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication, Qt
 from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtWidgets import QAction, QMessageBox
+from qgis.PyQt.QtWidgets import QAction, QMessageBox, QTableWidgetItem
 from qgis.gui import QgsMapToolEmitPoint, QgsRubberBand
+from qgis.core import QgsProject
 
 # Initialize Qt resources from file resources.py
 from .resources import *
@@ -72,7 +73,10 @@ class PipelinePlanner:
         # Check if plugin was started the first time in current QGIS session
         # Must be set in initGui() to survive plugin reloads
         self.first_start = None
-        self.dlg = PipelinePlannerDialog()
+        self.dlg = PipelinePlannerDialog()  # create the dialog
+        self.dlg.tblImpacts.setColumnWidth(1, 50)
+        self.dlg.tblImpacts.setColumnWidth(2, 225)
+        self.dlg.tblImpacts.setColumnWidth(3, 120)
 
     # noinspection PyMethodMayBeStatic
     def tr(self, message):
@@ -215,5 +219,24 @@ class PipelinePlanner:
             self.rubberbandPipeline.show()
         elif button == Qt.RightButton:
             pipeline = self.rubberbandPipeline.asGeometry()
+            self.dlg.tblImpacts.setRowCount(0)  # 将之前的记录清零
             QMessageBox.information(None, "PipeLine", pipeline.asWkt())
-            self.rubberbandPipeline.reset()
+
+            lyrRaptor = QgsProject.instance().mapLayersByName("Raptor Buffer")[0]
+            raptors = lyrRaptor.getFeatures(pipeline.boundingBox())
+            for raptor in raptors:
+                Constraint_value = raptor.attribute("recentspec")
+                ID_value = raptor.attribute("Nest_ID")
+                Status_value = raptor.attribute("recentstat")
+                Distance_value = pipeline.distance(raptor.geometry().centroid())
+                if raptor.geometry().intersects(pipeline):
+                    row = self.dlg.tblImpacts.rowCount()
+                    self.dlg.tblImpacts.insertRow(row)
+                    self.dlg.tblImpacts.setItem(row, 0, QTableWidgetItem(Constraint_value))
+                    self.dlg.tblImpacts.setItem(row, 1, QTableWidgetItem(str(ID_value)))
+                    self.dlg.tblImpacts.setItem(row, 2, QTableWidgetItem(Status_value))
+                    self.dlg.tblImpacts.setItem(row, 3, QTableWidgetItem("{:4.5f}".format(Distance_value)))
+
+            self.dlg.show()
+
+            # self.rubberbandPipeline.reset()
